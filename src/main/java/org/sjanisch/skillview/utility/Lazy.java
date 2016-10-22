@@ -30,7 +30,7 @@ import java.util.function.Supplier;
 /**
  * A thread safe implementation of a lazy initialiser.
  * <p>
- * Typical use cases are the creation of singletons of preventing to call into
+ * Typical use cases are the creation of singletons or preventing to call into
  * overridable methods from within the constructor.
  * <p>
  * {@link #hashCode()} and {@link #equals(Object)} are implemented against

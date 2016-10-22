@@ -42,6 +42,7 @@ import org.sjanisch.skillview.analysis.api.SkillTag;
 import org.sjanisch.skillview.contribution.api.Contributor;
 
 /**
+ * Thread-safe and immutableimplementation of {@link ContributionAnalysis}.
  * 
  * @author sebastianjanisch
  *
