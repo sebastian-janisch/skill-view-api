@@ -31,6 +31,7 @@ import java.util.Optional;
 import org.sjanisch.skillview.contribution.api.Contribution;
 import org.sjanisch.skillview.contribution.api.ContributionId;
 import org.sjanisch.skillview.contribution.api.Contributor;
+import org.sjanisch.skillview.contribution.api.Project;
 
 /**
  * Immutable implemenation of {@link Contribution}.
@@ -41,6 +42,7 @@ import org.sjanisch.skillview.contribution.api.Contributor;
 public class DefaultContribution implements Contribution {
 
 	private final ContributionId id;
+	private final Project project;
 	private final Contributor contributor;
 	private final Instant contributionTime;
 	private final String message;
@@ -53,6 +55,7 @@ public class DefaultContribution implements Contribution {
 	 * {@code previousContent}.
 	 * 
 	 * @param id
+	 * @param project
 	 * @param contributor
 	 * @param contributionTime
 	 * @param message
@@ -64,7 +67,8 @@ public class DefaultContribution implements Contribution {
 	 */
 	// @formatter:off
 	public DefaultContribution(
-			ContributionId id, 
+			ContributionId id,
+			Project project,
 			Contributor contributor, 
 			Instant contributionTime, 
 			String message,
@@ -73,6 +77,7 @@ public class DefaultContribution implements Contribution {
 			ByteBuffer previousContent) {
 		// @formatter:on
 		this.id = Objects.requireNonNull(id, "id");
+		this.project = Objects.requireNonNull(project, "project");
 		this.contributor = Objects.requireNonNull(contributor, "contributor");
 		this.contributionTime = Objects.requireNonNull(contributionTime, "contributionTime");
 		this.message = message == null ? null : message.trim().isEmpty() ? null : message.trim();
@@ -91,6 +96,11 @@ public class DefaultContribution implements Contribution {
 	@Override
 	public ContributionId getId() {
 		return id;
+	}
+	
+	@Override
+	public Project getProject() {
+		return project;
 	}
 
 	@Override

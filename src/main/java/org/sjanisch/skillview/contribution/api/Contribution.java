@@ -47,6 +47,13 @@ public interface Contribution {
 
 	/**
 	 * 
+	 * @return the project that this contribution originated from. Never
+	 *         {@code null}.
+	 */
+	Project getProject();
+
+	/**
+	 * 
 	 * @return never {@code null}.
 	 */
 	Contributor getContributor();
