@@ -49,7 +49,7 @@ public class ExceptionWrappers {
 		try {
 			return supplier.get();
 		} catch (Exception e) {
-			throw new RuntimeException();
+			throw new RuntimeException(e);
 		}
 	}
 
