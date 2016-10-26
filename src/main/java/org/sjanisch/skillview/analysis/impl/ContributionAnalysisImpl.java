@@ -23,106 +23,283 @@ SOFTWARE.
  */
 package org.sjanisch.skillview.analysis.impl;
 
+import static java.util.stream.Collectors.groupingBy;
+
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.LongSummaryStatistics;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.function.DoubleUnaryOperator;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.sjanisch.skillview.analysis.api.ContributionAnalysis;
 import org.sjanisch.skillview.analysis.api.ContributionScore;
-import org.sjanisch.skillview.analysis.api.ScoreOriginator;
-import org.sjanisch.skillview.analysis.api.SkillTag;
+import org.sjanisch.skillview.analysis.api.DetailedContributionScore;
 import org.sjanisch.skillview.contribution.api.Contributor;
 
 /**
- * Thread-safe and immutableimplementation of {@link ContributionAnalysis}.
+ * Thread-safe and immutable implementation of {@link ContributionAnalysis}.
  * 
  * @author sebastianjanisch
  *
  */
 public class ContributionAnalysisImpl implements ContributionAnalysis {
 
-	private final Map<Contributor, Set<ContributionScore>> data;
+	private final List<DetailedContributionScore> data;
+	private final Instant start;
+	private final Instant end;
+	private final Predicate<DetailedContributionScore> filter;
+	private final boolean normalised;
+
+	private final Instant earliest;
+	private final Instant latest;
 
 	/**
 	 * 
 	 * @param data
-	 *            must not be {@code null}. Copy will be taken.
+	 *            unnormalised scores. Must not be {@code null}. Copy will be
+	 *            taken.
+	 * @param start
+	 *            the start time of this analysis which must not be {@code null}
+	 *            and must not be less or equal to the earliest entry in the
+	 *            data.
+	 * @param end
+	 *            the end time of this analysis which must not be {@code null}
+	 *            and must not be greater than the latest entry in the data.
 	 */
-	public ContributionAnalysisImpl(Map<Contributor, Set<ContributionScore>> data) {
+	public ContributionAnalysisImpl(Collection<DetailedContributionScore> data, Instant start, Instant end) {
 		Objects.requireNonNull(data, "data");
-		this.data = Collections.unmodifiableMap(new HashMap<>(data));
+		this.data = Collections.unmodifiableList(new ArrayList<>(data));
+		this.start = Objects.requireNonNull(start, "start");
+		this.end = Objects.requireNonNull(end, "end");
+
+		LongSummaryStatistics stats = data.stream().map(DetailedContributionScore::getScoreTime)
+				.mapToLong(Instant::toEpochMilli).summaryStatistics();
+
+		if (Instant.ofEpochMilli(stats.getMin()).isBefore(start)) {
+			String msg = String.format("%s vs %s", Instant.ofEpochMilli(stats.getMin()), start);
+			throw new IllegalArgumentException("earliest element is before start time: " + msg);
+		}
+
+		if (Instant.ofEpochMilli(stats.getMax()).isAfter(end)) {
+			String msg = String.format("%s vs %s", Instant.ofEpochMilli(stats.getMax()), end);
+			throw new IllegalArgumentException("latest element is after end time: " + msg);
+		}
+
+		this.earliest = Instant.ofEpochMilli(stats.getMin());
+		this.latest = Instant.ofEpochMilli(stats.getMax());
+
+		filter = __ -> true;
+		this.normalised = false;
+	}
+
+	private ContributionAnalysisImpl(List<DetailedContributionScore> data, Instant start, Instant end,
+			Predicate<DetailedContributionScore> filter, boolean normalised) {
+		this.data = data; // no copy, internal contructor
+		this.start = start;
+		this.end = end;
+		this.filter = filter;
+		this.normalised = normalised;
+
+		LongSummaryStatistics stats = data.stream().filter(filter).map(DetailedContributionScore::getScoreTime)
+				.mapToLong(Instant::toEpochMilli).summaryStatistics();
+
+		this.earliest = Instant.ofEpochMilli(stats.getMin());
+		this.latest = Instant.ofEpochMilli(stats.getMax());
 	}
 
 	@Override
-	public Optional<Instant> getStartTime() {
-		// @formatter:off
-		Optional<Instant> result = data
-				.values()
-				.stream()
-				.flatMap(Set::stream)
-				.map(ContributionScore::getScoreTime)
-				.collect(Collectors.minBy(Instant::compareTo));
-		// @formatter:on
-
-		return result;
+	public Instant getStartTime() {
+		return start;
 	}
 
 	@Override
-	public Optional<Instant> getEndTime() {
-		// @formatter:off
-		Optional<Instant> result = data
-				.values()
-				.stream()
-				.flatMap(Set::stream)
-				.map(ContributionScore::getScoreTime)
-				.collect(Collectors.maxBy(Instant::compareTo));
-		// @formatter:on
-
-		return result;
+	public Instant getEndTime() {
+		return end;
 	}
 
 	@Override
 	public Collection<Contributor> getContributors() {
-		return data.keySet();
+		return data().map(DetailedContributionScore::getContributor).collect(Collectors.toSet());
+	}
+
+	@Override
+	public Map<Contributor, Collection<ContributionScore>> getScores() {
+		if (normalised) {
+			Map<Contributor, Collection<ContributionScore>> result = normalise(data(), null);
+			return result;
+		} else {
+			// @formatter:off
+			Map<Contributor, Collection<ContributionScore>> result = data()
+					.collect(Collectors.groupingBy(DetailedContributionScore::getContributor, 
+												   Collectors.mapping(ContributionScore.class::cast, 
+														   		      Collectors.toCollection(ArrayList::new))));
+			// @formatter:on
+			return result;
+		}
 	}
 
 	@Override
 	public Collection<ContributionScore> getScores(Contributor contributor) {
 		Objects.requireNonNull(contributor, "contributor");
 
-		Set<ContributionScore> scores = data.get(contributor);
-		if (scores == null) {
-			throw new IllegalArgumentException("unknown contributor " + contributor.getName());
+		if (normalised) {
+			Map<Contributor, Collection<ContributionScore>> normalised = normalise(data(), contributor);
+			return normalised.getOrDefault(contributor, Collections.emptySet());
+		} else {
+			Collection<ContributionScore> result = data().filter(score -> score.getContributor().equals(contributor))
+					.collect(Collectors.toSet());
+			return result;
 		}
+	}
 
-		// @formatter:off
-		Map<Instant, Map<ScoreOriginator, Map<SkillTag, List<ContributionScore>>>> grouped = scores
-				.stream()
-				.collect(Collectors.groupingBy(ContributionScore::getScoreTime,
-						 Collectors.groupingBy(ContributionScore::getScoreOriginator, 
-						 Collectors.groupingBy(ContributionScore::getSkillTag))));
-		// @formatter:on
+	@Override
+	public Collection<ContributionAnalysis> getScores(Duration timeWindow) {
+		Objects.requireNonNull(timeWindow, "timeWindow");
 
-		Collection<ContributionScore> result = new LinkedList<>();
-		for (Instant scoreTime : grouped.keySet()) {
-			for (ScoreOriginator scoreOriginator : grouped.get(scoreTime).keySet()) {
-				for (SkillTag skillTag : grouped.get(scoreTime).get(scoreOriginator).keySet()) {
-					double summedScore = grouped.get(scoreTime).get(scoreOriginator).get(skillTag).stream()
-							.mapToDouble(ContributionScore::getScore).sum();
-					result.add(ContributionScore.of(skillTag, summedScore, scoreOriginator, scoreTime));
-				}
+		long excessStart = (long) Math
+				.floor(Duration.between(start, earliest).getSeconds() / (timeWindow.getSeconds() + 0.0));
+		long excessEnd = (long) Math.ceil(Duration.between(latest, end).getSeconds() / (timeWindow.getSeconds() + 0.0));
+
+		Instant adjustedStart = start.plus(Duration.ofSeconds(timeWindow.getSeconds() * excessStart));
+		Instant adjustedEnd = end.minus(Duration.ofSeconds(timeWindow.getSeconds() * excessEnd));
+
+		Instant currentStart = adjustedStart;
+
+		Collection<ContributionAnalysis> result = new LinkedList<>();
+		do {
+			Instant closedStart = currentStart;
+			Instant closedEnd = closedStart.plus(timeWindow);
+
+			Predicate<DetailedContributionScore> filter = score -> !closedStart.isAfter(score.getScoreTime());
+			filter = filter.and(score -> score.getScoreTime().isBefore(closedEnd));
+
+			result.add(new ContributionAnalysisImpl(data, closedStart, closedEnd.minusSeconds(1),
+					filter.and(this.filter), normalised));
+
+		} while (!(currentStart = currentStart.plus(timeWindow)).isAfter(adjustedEnd));
+
+		return Collections.unmodifiableCollection(result);
+	}
+
+	@Override
+	public boolean isNormalised() {
+		return normalised;
+	}
+
+	@Override
+	public ContributionAnalysis normalised() {
+		return new ContributionAnalysisImpl(data, start, end, filter, true);
+	}
+
+	@Override
+	public ContributionAnalysis denormalised() {
+		return new ContributionAnalysisImpl(data, start, end, filter, false);
+	}
+
+	private Stream<DetailedContributionScore> data() {
+		return data.stream().filter(filter);
+	}
+
+	private Map<Contributor, Collection<ContributionScore>> normalise(Stream<DetailedContributionScore> unnormalised,
+			Contributor contributor) {
+		Map<NormaliseKey, List<DetailedContributionScore>> groups = unnormalised.collect(groupingBy(NormaliseKey::new));
+
+		Map<Contributor, Collection<ContributionScore>> result = new HashMap<>();
+		for (NormaliseKey key : groups.keySet()) {
+			List<DetailedContributionScore> scores = groups.get(key);
+			Map<Contributor, Collection<ContributionScore>> normalised = normalise(key, scores, contributor);
+
+			for (Contributor c : normalised.keySet()) {
+				result.putIfAbsent(c, new LinkedList<>());
+				result.get(c).addAll(normalised.get(c));
 			}
 		}
 
 		return result;
 	}
 
+	private Map<Contributor, Collection<ContributionScore>> normalise(NormaliseKey key,
+			List<DetailedContributionScore> scores, Contributor contributor) {
+		if (scores.isEmpty()) {
+			return Collections.emptyMap();
+		}
+
+		// @formatter:off
+		Map<Contributor, Double> scoreSums = scores
+				.stream()
+				.collect(Collectors.groupingBy(DetailedContributionScore::getContributor, 
+											   Collectors.mapping(score -> score.getScore(), 
+													   		      Collectors.summingDouble(d -> d))));
+		// @formatter:on
+
+		double average = scoreSums.values().stream().mapToDouble(Double::doubleValue).average().getAsDouble();
+		double sumOfSquares = scoreSums.values().stream().mapToDouble(Double::doubleValue)
+				.map(score -> Math.pow(score - average, 2)).sum();
+
+		double stdDev = Math.sqrt(1.0 / scoreSums.size() * sumOfSquares);
+
+		DoubleUnaryOperator toStandardised = score -> {
+			if(stdDev == 0.0) {
+				return 0.0;
+			}
+			double standardised = (score - average) / stdDev;
+			return standardised;
+		};
+
+		Predicate<Contributor> contributorFilter = c -> contributor == null ? true : c.equals(contributor);
+
+		// @formatter:off
+		Map<Contributor, Double> standardisedScores = scoreSums
+				.entrySet()
+				.stream()
+				.filter(e -> contributorFilter.test(e.getKey()))
+				.collect(Collectors.toMap(Entry::getKey, e -> toStandardised.applyAsDouble(e.getValue())));
+		
+		Map<Contributor, Collection<ContributionScore>> result = standardisedScores
+				.entrySet()
+				.stream()
+				.collect(Collectors.groupingBy(Entry::getKey, 
+											   Collectors.mapping(e -> 
+											   		   ContributionScore.of(key.score.getSkillTag(), 
+													   e.getValue(), 
+													   key.score.getScoreOriginator()), Collectors.toCollection(ArrayList::new))));
+		// @formatter:on
+
+		return result;
+	}
+
+	private static class NormaliseKey {
+		private final DetailedContributionScore score;
+
+		public NormaliseKey(DetailedContributionScore score) {
+			this.score = score;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(score.getScoreOriginator(), score.getSkillTag());
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == null || !(obj instanceof NormaliseKey)) {
+				return false;
+			}
+			NormaliseKey key = (NormaliseKey) obj;
+			return key.score.getScoreOriginator().equals(score.getScoreOriginator())
+					&& key.score.getSkillTag().equals(score.getSkillTag());
+		}
+
+	}
 }

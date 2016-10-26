@@ -28,10 +28,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -40,13 +37,18 @@ import org.sjanisch.skillview.analysis.api.ContributionAnalysis;
 import org.sjanisch.skillview.analysis.api.ContributionAnalysisService;
 import org.sjanisch.skillview.analysis.api.ContributionScore;
 import org.sjanisch.skillview.analysis.api.ContributionScorer;
+import org.sjanisch.skillview.analysis.api.DetailedContributionScore;
 import org.sjanisch.skillview.contribution.api.Contribution;
 import org.sjanisch.skillview.contribution.api.ContributionService;
-import org.sjanisch.skillview.contribution.api.Contributor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * Implements the {@link ContributionAnalysisService} against a
+ * {@link ContributionService contribution service} and a collection of
+ * {@link ContributionScorer scorers} to score each contribution.
+ * <p>
+ * This implementation is immutable and thread-safe.
  * 
  * @author sebastianjanisch
  *
@@ -82,11 +84,15 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 				endInclusive)) {
 
 			// @formatter:off
-			Function<Contribution, List<ContributionScore>> score = contribution -> {
-				List<ContributionScore> scores = scorers
+			Function<Contribution, List<DetailedContributionScore>> score = contribution -> {
+				List<DetailedContributionScore> scores = scorers
 						.stream()
 						.map(scorer -> {
-							Collection<ContributionScore> contributionScore = scorer.score(contribution);
+							Collection<DetailedContributionScore> contributionScore = scorer
+									.score(contribution)
+									.stream()
+									.map(toDetailedContributionScore(contribution))
+									.collect(Collectors.toList());
 							log(contribution, contributionScore);
 							return contributionScore;
 						})
@@ -95,19 +101,26 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 				return scores;
 			};
 			
-			Map<Contributor, Set<ContributionScore>> contributionScores = contributions.parallel().collect(
-					Collectors.groupingBy(Contribution::getContributor, Collectors.mapping(score, Collectors.toSet())))
-					.entrySet()
-					.stream()
-					.collect(Collectors.toMap(Entry::getKey, e -> e.getValue().stream().flatMap(List::stream).collect(Collectors.toSet()))
-			);
+			List<DetailedContributionScore> scores = contributions
+						.parallel()
+						.map(score)
+						.flatMap(List::stream)
+						.collect(Collectors.toList());
 			// @formatter:on
 
-			return new ContributionAnalysisImpl(contributionScores);
+			return new ContributionAnalysisImpl(scores, startExclusive, endInclusive);
 		}
 	}
 
-	private void log(Contribution contribution, Collection<ContributionScore> contributionScore) {
+	private static Function<ContributionScore, DetailedContributionScore> toDetailedContributionScore(
+			Contribution contribution) {
+		return score -> {
+			return DetailedContributionScore.of(score, contribution.getContributionTime(), contribution.getProject(),
+					contribution.getContributor());
+		};
+	}
+
+	private void log(Contribution contribution, Collection<DetailedContributionScore> contributionScore) {
 		if (log.isDebugEnabled()) {
 			StringBuilder sb = new StringBuilder();
 
