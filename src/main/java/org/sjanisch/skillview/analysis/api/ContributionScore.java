@@ -23,7 +23,6 @@ SOFTWARE.
  */
 package org.sjanisch.skillview.analysis.api;
 
-import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -60,27 +59,16 @@ public interface ContributionScore {
 
 	/**
 	 * 
-	 * @return the time when this score was accomplished (i.e. the underlying
-	 *         contribution was made). Never {@code null}.
-	 */
-	Instant getScoreTime();
-
-	/**
-	 * 
 	 * @param skillTag
 	 *            must not be {@code null}
 	 * @param score
 	 * @param scoreOriginator
 	 *            must not be {@code null}
-	 * @param scoreTime
-	 *            must not be {@code null}
 	 * @return never {@code null}
 	 */
-	public static ContributionScore of(SkillTag skillTag, double score, ScoreOriginator scoreOriginator,
-			Instant scoreTime) {
+	public static ContributionScore of(SkillTag skillTag, double score, ScoreOriginator scoreOriginator) {
 		Objects.requireNonNull(skillTag, "skillTag");
 		Objects.requireNonNull(scoreOriginator, "scoreOriginator");
-		Objects.requireNonNull(scoreTime, "scoreTime");
 
 		return new ContributionScore() {
 
@@ -100,14 +88,9 @@ public interface ContributionScore {
 			}
 
 			@Override
-			public Instant getScoreTime() {
-				return scoreTime;
-			}
-
-			@Override
 			public String toString() {
-				return String.format("%s[%s:%f:%s:%s]", getClass().getSimpleName(), skillTag.getValue(), score,
-						scoreOriginator.getValue(), scoreTime);
+				return String.format("%s[%s:%f:%s]", getClass().getSimpleName(), skillTag.getValue(), score,
+						scoreOriginator.getValue());
 			}
 		};
 
