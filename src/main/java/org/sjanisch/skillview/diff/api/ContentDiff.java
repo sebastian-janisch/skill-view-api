@@ -26,7 +26,7 @@ package org.sjanisch.skillview.diff.api;
 import java.util.Collection;
 
 /**
- * Exposes the added, removed and changed parts between two contents.
+ * Exposes the touched (modified or added) parts between two contents.
  * <p>
  * Implementors must retain thread-safety and immutability.
  * 
