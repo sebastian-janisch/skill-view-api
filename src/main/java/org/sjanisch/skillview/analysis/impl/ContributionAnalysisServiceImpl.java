@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -80,6 +81,8 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 		Objects.requireNonNull(startExclusive, "startExclusive");
 		Objects.requireNonNull(endInclusive, "endInclusive");
 
+		AtomicLong scoredContributions = new AtomicLong();
+		
 		try (Stream<Contribution> contributions = contributionService.retrieveContributions(startExclusive,
 				endInclusive)) {
 
@@ -93,7 +96,7 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 									.stream()
 									.map(toDetailedContributionScore(contribution))
 									.collect(Collectors.toList());
-							log(contribution, contributionScore);
+							log(contribution, contributionScore, scoredContributions.incrementAndGet());
 							return contributionScore;
 						})
 						.flatMap(Collection::stream)
@@ -120,7 +123,11 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 		};
 	}
 
-	private void log(Contribution contribution, Collection<DetailedContributionScore> contributionScore) {
+	private void log(Contribution contribution, Collection<DetailedContributionScore> contributionScore, long scoredContributions) {
+		if(log.isInfoEnabled() && scoredContributions % 10000 == 0) {
+			log.info(String.format("Scored %s contributions", scoredContributions));
+		}
+		
 		if (log.isDebugEnabled()) {
 			StringBuilder sb = new StringBuilder();
 
