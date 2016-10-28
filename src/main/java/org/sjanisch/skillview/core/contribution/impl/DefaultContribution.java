@@ -23,7 +23,6 @@ SOFTWARE.
  */
 package org.sjanisch.skillview.core.contribution.impl;
 
-import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -47,8 +46,8 @@ public class DefaultContribution implements Contribution {
 	private final Instant contributionTime;
 	private final String message;
 	private final String fileName;
-	private final ByteBuffer content;
-	private final ByteBuffer previousContent;
+	private final String content;
+	private final String previousContent;
 
 	/**
 	 * Must all be non {@code null} except for {@code message} and
@@ -61,9 +60,7 @@ public class DefaultContribution implements Contribution {
 	 * @param message
 	 * @param fileName
 	 * @param content
-	 *            copy will be taken
 	 * @param previousContent
-	 *            copy will be taken
 	 */
 	// @formatter:off
 	public DefaultContribution(
@@ -73,8 +70,8 @@ public class DefaultContribution implements Contribution {
 			Instant contributionTime, 
 			String message,
 			String fileName, 
-			ByteBuffer content, 
-			ByteBuffer previousContent) {
+			String content, 
+			String previousContent) {
 		// @formatter:on
 		this.id = Objects.requireNonNull(id, "id");
 		this.project = Objects.requireNonNull(project, "project");
@@ -83,21 +80,15 @@ public class DefaultContribution implements Contribution {
 		this.message = message == null ? null : message.trim().isEmpty() ? null : message.trim();
 		this.fileName = Objects.requireNonNull(fileName, "fileName");
 
-		Objects.requireNonNull(content, "content");
-		this.content = ByteBuffer.wrap(content.array()).asReadOnlyBuffer();
-
-		if (previousContent == null) {
-			this.previousContent = ByteBuffer.wrap("".getBytes()).asReadOnlyBuffer();
-		} else {
-			this.previousContent = ByteBuffer.wrap(previousContent.array()).asReadOnlyBuffer();
-		}
+		this.content = Objects.requireNonNull(content, "content");
+		this.previousContent = previousContent == null ? "" : previousContent;
 	}
 
 	@Override
 	public ContributionId getId() {
 		return id;
 	}
-	
+
 	@Override
 	public Project getProject() {
 		return project;
@@ -124,12 +115,12 @@ public class DefaultContribution implements Contribution {
 	}
 
 	@Override
-	public ByteBuffer getContent() {
+	public String getContent() {
 		return content;
 	}
 
 	@Override
-	public ByteBuffer getPreviousContent() {
+	public String getPreviousContent() {
 		return previousContent;
 	}
 

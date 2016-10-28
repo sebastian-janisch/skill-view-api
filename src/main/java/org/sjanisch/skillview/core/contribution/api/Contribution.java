@@ -23,7 +23,6 @@ SOFTWARE.
  */
 package org.sjanisch.skillview.core.contribution.api;
 
-import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -79,16 +78,14 @@ public interface Contribution {
 
 	/**
 	 * 
-	 * @return an unmodifiable {@link ByteBuffer} that represents the content of
-	 *         this contribution. Never {@code null}.
+	 * @return the content of this contribution. Never {@code null}.
 	 */
-	ByteBuffer getContent();
+	String getContent();
 
 	/**
 	 * 
-	 * @return an unmodifiable {@link ByteBuffer} that represents the previous
-	 *         content of this contribution. Never {@code null}.
+	 * @return the previous content of this contribution. Never {@code null}.
 	 */
-	ByteBuffer getPreviousContent();
+	String getPreviousContent();
 
 }

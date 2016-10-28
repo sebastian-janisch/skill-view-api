@@ -23,8 +23,6 @@ SOFTWARE.
  */
 package org.sjanisch.skillview.core.diff.api;
 
-import java.nio.ByteBuffer;
-
 /**
  * Carries out a {@link ContentDiff}.
  * <p>
@@ -44,6 +42,6 @@ public interface ContentDiffService {
 	 *            must not be {@code null}
 	 * @return never {@code null}
 	 */
-	ContentDiff diff(ByteBuffer previousContent, ByteBuffer currentContent);
+	ContentDiff diff(String previousContent, String currentContent);
 
 }
