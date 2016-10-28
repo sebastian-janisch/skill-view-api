@@ -31,12 +31,13 @@ import org.sjanisch.skillview.core.contribution.api.Contribution;
  * Assigns {@link ContributionScore scores} to a {@link Contribution
  * contribution}.
  * <p>
+ * See {@link ContributionScore} for restrictions on the values of a score.
+ * <p>
  * Implementors must retain thread-safety and immutability.
  * 
  * @author sebastianjanisch
  *
  */
-@FunctionalInterface
 public interface ContributionScorer {
 
 	/**
@@ -48,5 +49,17 @@ public interface ContributionScorer {
 	 *         Never {@code null}.
 	 */
 	Collection<ContributionScore> score(Contribution contribution);
+
+	/**
+	 * A neutral score is the score that is assigned in case of absence of a
+	 * contribution for a contributor.
+	 * <p>
+	 * For example, a scorer that counts lines of contribution content (i.e. one
+	 * line gives a score of {@code 1}, two lines a score of {@code 2}, etc.)
+	 * would return {@code 0} as its neutral score.
+	 * 
+	 * @return neutral score
+	 */
+	double getNeutralScore();
 
 }

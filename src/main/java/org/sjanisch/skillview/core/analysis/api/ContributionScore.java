@@ -28,7 +28,8 @@ import java.util.Objects;
 /**
  * A contribution score describes a numerical value assigned to a certain skill.
  * <p>
- * The score does not follow a specific scale.
+ * The score does not follow a specific scale but must be linear (i.e. a score
+ * of {@code 10} must be twice as valuable compared to a score of {@code 5}.
  * <p>
  * {@link #hashCode()} and {@link #equals(Object)} are not to be implemented.
  * <p>
