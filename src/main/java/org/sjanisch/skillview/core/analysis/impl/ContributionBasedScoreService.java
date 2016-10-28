@@ -30,9 +30,9 @@ import org.slf4j.LoggerFactory;
  * @author sebastianjanisch
  *
  */
-public class DefaultContributionScoreService implements ContributionScoreService {
+public class ContributionBasedScoreService implements ContributionScoreService {
 
-	private static final Logger log = LoggerFactory.getLogger(DefaultContributionScoreService.class);
+	private static final Logger log = LoggerFactory.getLogger(ContributionBasedScoreService.class);
 
 	private final ContributionService contributionService;
 	private final Collection<ContributionScorer> scorers;
@@ -44,7 +44,7 @@ public class DefaultContributionScoreService implements ContributionScoreService
 	 * @param scorers
 	 *            must not be {@code null}. Copy will be taken.
 	 */
-	public DefaultContributionScoreService(ContributionService contributionService,
+	public ContributionBasedScoreService(ContributionService contributionService,
 			Collection<ContributionScorer> scorers) {
 		this.contributionService = Objects.requireNonNull(contributionService, "contributionService");
 		Objects.requireNonNull(scorers, "scorers");
