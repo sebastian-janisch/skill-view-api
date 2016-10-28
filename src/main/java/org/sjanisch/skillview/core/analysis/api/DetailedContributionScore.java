@@ -39,20 +39,28 @@ public interface DetailedContributionScore extends ContributionScore {
 	Contributor getContributor();
 
 	/**
+	 * 
+	 * @return Never {@code null}.
+	 */
+	ScoreOriginator getScoreOriginator();
+
+	/**
 	 * Must all be non {@code null}
 	 * 
 	 * @param score
 	 * @param scoreTime
 	 * @param project
 	 * @param contributor
+	 * @param scoreOriginator
 	 * @return never {@code null}
 	 */
 	public static DetailedContributionScore of(ContributionScore score, Instant scoreTime, Project project,
-			Contributor contributor) {
+			Contributor contributor, ScoreOriginator scoreOriginator) {
 		Objects.requireNonNull(score, "score");
 		Objects.requireNonNull(scoreTime, "scoreTime");
 		Objects.requireNonNull(project, "project");
 		Objects.requireNonNull(contributor, "contributor");
+		Objects.requireNonNull(scoreOriginator, "scoreOriginator");
 
 		return new DetailedContributionScore() {
 
@@ -63,7 +71,7 @@ public interface DetailedContributionScore extends ContributionScore {
 
 			@Override
 			public ScoreOriginator getScoreOriginator() {
-				return score.getScoreOriginator();
+				return scoreOriginator;
 			}
 
 			@Override
@@ -88,8 +96,8 @@ public interface DetailedContributionScore extends ContributionScore {
 
 			@Override
 			public String toString() {
-				return String.format("%s[%s:%s:%s:%s]", getClass().getSimpleName(), score.toString(),
-						project.toString(), scoreTime.toString(), contributor.toString());
+				return String.format("%s[%s:%s:%s:%s:%s]", getClass().getSimpleName(), score.toString(),
+						project.toString(), scoreTime.toString(), contributor.toString(), scoreOriginator.toString());
 			}
 		};
 	}

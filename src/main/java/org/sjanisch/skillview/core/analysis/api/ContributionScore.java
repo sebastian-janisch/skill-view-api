@@ -53,22 +53,13 @@ public interface ContributionScore {
 
 	/**
 	 * 
-	 * @return Never {@code null}.
-	 */
-	ScoreOriginator getScoreOriginator();
-
-	/**
-	 * 
 	 * @param skillTag
 	 *            must not be {@code null}
 	 * @param score
-	 * @param scoreOriginator
-	 *            must not be {@code null}
 	 * @return never {@code null}
 	 */
-	public static ContributionScore of(SkillTag skillTag, double score, ScoreOriginator scoreOriginator) {
+	public static ContributionScore of(SkillTag skillTag, double score) {
 		Objects.requireNonNull(skillTag, "skillTag");
-		Objects.requireNonNull(scoreOriginator, "scoreOriginator");
 
 		return new ContributionScore() {
 
@@ -83,14 +74,8 @@ public interface ContributionScore {
 			}
 
 			@Override
-			public ScoreOriginator getScoreOriginator() {
-				return scoreOriginator;
-			}
-
-			@Override
 			public String toString() {
-				return String.format("%s[%s:%f:%s]", getClass().getSimpleName(), skillTag.getValue(), score,
-						scoreOriginator.getValue());
+				return String.format("%s[%s:%f:%s]", getClass().getSimpleName(), skillTag.getValue(), score);
 			}
 		};
 

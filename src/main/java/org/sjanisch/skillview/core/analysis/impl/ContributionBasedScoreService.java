@@ -15,6 +15,7 @@ import org.sjanisch.skillview.core.analysis.api.ContributionScore;
 import org.sjanisch.skillview.core.analysis.api.ContributionScoreService;
 import org.sjanisch.skillview.core.analysis.api.ContributionScorer;
 import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
+import org.sjanisch.skillview.core.analysis.api.ScoreOriginator;
 import org.sjanisch.skillview.core.contribution.api.Contribution;
 import org.sjanisch.skillview.core.contribution.api.ContributionService;
 import org.slf4j.Logger;
@@ -70,7 +71,7 @@ public class ContributionBasedScoreService implements ContributionScoreService {
 							Collection<DetailedContributionScore> contributionScore = scorer
 									.score(contribution)
 									.stream()
-									.map(toDetailedContributionScore(contribution))
+									.map(toDetailedContributionScore(contribution, scorer))
 									.collect(Collectors.toList());
 							log(contribution, contributionScore, scoredContributions.incrementAndGet());
 							return contributionScore;
@@ -92,14 +93,15 @@ public class ContributionBasedScoreService implements ContributionScoreService {
 	}
 
 	private static Function<ContributionScore, DetailedContributionScore> toDetailedContributionScore(
-			Contribution contribution) {
+			Contribution contribution, ContributionScorer scorer) {
 		return score -> {
+			ScoreOriginator scoreOriginator = ScoreOriginator.of(scorer.getClass().getName());
 			return DetailedContributionScore.of(score, contribution.getContributionTime(), contribution.getProject(),
-					contribution.getContributor());
+					contribution.getContributor(), scoreOriginator);
 		};
 	}
 
-	private void log(Contribution contribution, Collection<DetailedContributionScore> contributionScore,
+	private void log(Contribution contribution, Collection<DetailedContributionScore> contributionScores,
 			long scoredContributions) {
 		if (log.isInfoEnabled() && scoredContributions % 10000 == 0) {
 			log.info(String.format("Scored %s contributions", scoredContributions));
@@ -111,12 +113,12 @@ public class ContributionBasedScoreService implements ContributionScoreService {
 			sb.append("Scored contribution by ").append(contribution.getContributor().getName());
 			sb.append(" at time ").append(contribution.getContributionTime()).append(": ");
 
-			if (contributionScore.isEmpty()) {
+			if (contributionScores.isEmpty()) {
 				sb.append("no score");
 			} else {
 				sb.append(System.lineSeparator());
 
-				for (ContributionScore score : contributionScore) {
+				for (DetailedContributionScore score : contributionScores) {
 					sb.append("    ");
 					sb.append(score.getSkillTag().getValue()).append(" ");
 					sb.append(score.getScore()).append(" ");

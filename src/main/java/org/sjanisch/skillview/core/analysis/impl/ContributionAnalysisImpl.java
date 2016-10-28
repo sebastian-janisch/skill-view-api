@@ -272,8 +272,7 @@ public class ContributionAnalysisImpl implements ContributionAnalysis {
 				.collect(Collectors.groupingBy(Entry::getKey, 
 											   Collectors.mapping(e -> 
 											   		   ContributionScore.of(key.score.getSkillTag(), 
-													   e.getValue(), 
-													   key.score.getScoreOriginator()), Collectors.toCollection(ArrayList::new))));
+													   e.getValue()), Collectors.toCollection(ArrayList::new))));
 		// @formatter:on
 
 		return result;
