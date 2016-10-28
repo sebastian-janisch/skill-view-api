@@ -24,11 +24,15 @@ SOFTWARE.
 package org.sjanisch.skillview.core.contribution.impl;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedList;
 import java.util.Objects;
 import java.util.Optional;
 
 import org.sjanisch.skillview.core.contribution.api.Contribution;
 import org.sjanisch.skillview.core.contribution.api.ContributionId;
+import org.sjanisch.skillview.core.contribution.api.ContributionItem;
 import org.sjanisch.skillview.core.contribution.api.Contributor;
 import org.sjanisch.skillview.core.contribution.api.Project;
 
@@ -40,48 +44,96 @@ import org.sjanisch.skillview.core.contribution.api.Project;
  */
 public class DefaultContribution implements Contribution {
 
+	public static final class Builder {
+		private final ContributionId id;
+		private final Project project;
+		private final Contributor contributor;
+		private final Instant contributionTime;
+		private String message;
+		private final Collection<ContributionItem> contributionItems = new LinkedList<>();
+
+		/**
+		 * 
+		 * @param id
+		 * @param project
+		 * @param contributor
+		 * @param contributionTime
+		 */
+		private Builder(ContributionId id, Project project, Contributor contributor, Instant contributionTime) {
+			this.id = id;
+			this.project = project;
+			this.contributor = contributor;
+			this.contributionTime = contributionTime;
+		}
+
+		/**
+		 * 
+		 * @param message
+		 *            can be {@code null}
+		 * @return this instance. Never {@code null}.
+		 */
+		public Builder setMessage(String message) {
+			this.message = message;
+			return this;
+		}
+
+		/**
+		 * 
+		 * @param contributionItem
+		 *            must not be {@code null}.
+		 * @return this instance. Never {@code null}.
+		 */
+		public Builder addContributionItem(ContributionItem contributionItem) {
+			this.contributionItems.add(contributionItem);
+			return this;
+		}
+
+		/**
+		 * 
+		 * @return new {@link Contribution} with contents of this builder. Never
+		 *         {@code null}.
+		 */
+		public Contribution build() {
+			return new DefaultContribution(id, project, contributor, contributionTime, message, contributionItems);
+		}
+	}
+
 	private final ContributionId id;
 	private final Project project;
 	private final Contributor contributor;
 	private final Instant contributionTime;
 	private final String message;
-	private final String fileName;
-	private final String content;
-	private final String previousContent;
+	private final Collection<ContributionItem> contributionItems;
 
-	/**
-	 * Must all be non {@code null} except for {@code message} and
-	 * {@code previousContent}.
-	 * 
-	 * @param id
-	 * @param project
-	 * @param contributor
-	 * @param contributionTime
-	 * @param message
-	 * @param fileName
-	 * @param content
-	 * @param previousContent
-	 */
 	// @formatter:off
-	public DefaultContribution(
+	private DefaultContribution(
 			ContributionId id,
 			Project project,
 			Contributor contributor, 
 			Instant contributionTime, 
 			String message,
-			String fileName, 
-			String content, 
-			String previousContent) {
+			Collection<ContributionItem> contributionItems) {
 		// @formatter:on
 		this.id = Objects.requireNonNull(id, "id");
 		this.project = Objects.requireNonNull(project, "project");
 		this.contributor = Objects.requireNonNull(contributor, "contributor");
 		this.contributionTime = Objects.requireNonNull(contributionTime, "contributionTime");
 		this.message = message == null ? null : message.trim().isEmpty() ? null : message.trim();
-		this.fileName = Objects.requireNonNull(fileName, "fileName");
+		Objects.requireNonNull(contributionItems, "contributionItems");
+		this.contributionItems = Collections.unmodifiableCollection(new LinkedList<>(contributionItems));
+	}
 
-		this.content = Objects.requireNonNull(content, "content");
-		this.previousContent = previousContent == null ? "" : previousContent;
+	/**
+	 * Must all be non {@code null}.
+	 * 
+	 * @param id
+	 * @param project
+	 * @param contributor
+	 * @param contributionTime
+	 */
+	public static Builder newBuilder(ContributionId id, Project project, Contributor contributor,
+			Instant contributionTime) {
+		return new Builder(id, project, contributor, contributionTime);
 	}
 
 	@Override
@@ -110,18 +162,8 @@ public class DefaultContribution implements Contribution {
 	}
 
 	@Override
-	public String getPath() {
-		return fileName;
-	}
-
-	@Override
-	public String getContent() {
-		return content;
-	}
-
-	@Override
-	public String getPreviousContent() {
-		return previousContent;
+	public Collection<ContributionItem> getContributionItems() {
+		return contributionItems;
 	}
 
 }

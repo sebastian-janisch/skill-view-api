@@ -24,12 +24,13 @@ SOFTWARE.
 package org.sjanisch.skillview.core.contribution.api;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
- * A contribution item describes a <b>single</b> addition to a version control
- * system which could be part of a larger addition (e.g. one file out of a multi
- * file commit).
+ * A contribution describes an addition to a version control system at a given
+ * point in time carried out by a {@link Contributor contributor} which consists
+ * of potentially multiple {@link ContributionItem contribution items}.
  * <p>
  * Implementors must retain thread-safety and immutability.
  * 
@@ -71,21 +72,9 @@ public interface Contribution {
 
 	/**
 	 * 
-	 * @return the path name of this contribution. Never {@code null} or
-	 *         whitespace.
+	 * @return a collection (possibly unmodifiable) of contribution items that
+	 *         belong to this contribution. Never {@code null}.
 	 */
-	String getPath();
-
-	/**
-	 * 
-	 * @return the content of this contribution. Never {@code null}.
-	 */
-	String getContent();
-
-	/**
-	 * 
-	 * @return the previous content of this contribution. Never {@code null}.
-	 */
-	String getPreviousContent();
+	Collection<ContributionItem> getContributionItems();
 
 }
