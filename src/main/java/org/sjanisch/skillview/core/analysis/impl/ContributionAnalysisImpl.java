@@ -46,6 +46,7 @@ import org.sjanisch.skillview.core.analysis.api.ContributionAnalysis;
 import org.sjanisch.skillview.core.analysis.api.ContributionScore;
 import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinition;
 import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinitions;
+import org.sjanisch.skillview.core.analysis.api.ContributorUniverse;
 import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
 import org.sjanisch.skillview.core.analysis.api.ScoreOriginator;
 import org.sjanisch.skillview.core.analysis.api.SkillTag;
@@ -79,17 +80,25 @@ public class ContributionAnalysisImpl implements ContributionAnalysis {
 	 *            {@code null}.
 	 * @param contributionScorerDefinitions
 	 *            must not be {@code null}.
+	 * @param contributorUniverse
+	 *            must not be {@code null}.
 	 */
-	public ContributionAnalysisImpl(Collection<DetailedContributionScore> data, WeightingScheme weightingScheme,
-			ContributionScorerDefinitions contributionScorerDefinitions) {
+	// @formatter:off
+	public ContributionAnalysisImpl(
+			Collection<DetailedContributionScore> data, 
+			WeightingScheme weightingScheme,
+			ContributionScorerDefinitions contributionScorerDefinitions, 
+			ContributorUniverse contributorUniverse) {
+		// @formatter:on
 		Objects.requireNonNull(data, "data");
 		this.weightingScheme = Objects.requireNonNull(weightingScheme, "weightingScheme");
 		this.contributionScorerDefinitions = Objects.requireNonNull(contributionScorerDefinitions,
 				"contributionScorerDefinitions");
+		Objects.requireNonNull(contributorUniverse, "contributorUniverse");
 
 		this.data = Collections.unmodifiableList(new ArrayList<>(data));
 
-		this.allContributors = Lazy.of(this::getContributors);
+		this.allContributors = Lazy.of(contributorUniverse::getContributors);
 		this.descriptiveStats = Lazy.of(this::computeDescriptiveStatistics);
 	}
 
@@ -250,12 +259,6 @@ public class ContributionAnalysisImpl implements ContributionAnalysis {
 		}
 
 		return Collections.unmodifiableMap(result);
-	}
-
-	private Collection<Contributor> getContributors() {
-		Set<Contributor> result = data.stream().map(DetailedContributionScore::getContributor)
-				.collect(Collectors.toSet());
-		return Collections.unmodifiableSet(result);
 	}
 
 	private static class DescriptiveStats {

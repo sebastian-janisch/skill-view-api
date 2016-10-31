@@ -13,11 +13,15 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.junit.Test;
 import org.sjanisch.skillview.core.analysis.api.ContributionScore;
 import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinition;
 import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinitions;
+import org.sjanisch.skillview.core.analysis.api.ContributorUniverse;
 import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
 import org.sjanisch.skillview.core.analysis.api.ScoreOriginator;
 import org.sjanisch.skillview.core.analysis.api.SkillTag;
@@ -36,7 +40,7 @@ public class ContributionAnalysisImplTest {
 	@Test
 	public void testAllMethods_EmptyAnalysis_ExpectEmptyResults() {
 		ContributionAnalysisImpl analysis = new ContributionAnalysisImpl(Collections.emptySet(),
-				WeightingScheme.of(Collections.emptySet()), ContributionScorerDefinitions.of(Collections.emptySet()));
+				WeightingScheme.of(Collections.emptySet()), ContributionScorerDefinitions.of(Collections.emptySet()), contributorUniverse());
 
 		assertThat(analysis.getStartTime().isPresent(), is(false));
 		assertThat(analysis.getEndTime().isPresent(), is(false));
@@ -58,7 +62,7 @@ public class ContributionAnalysisImplTest {
 		ContributionScorerDefinitions contributionScorerDefinitions = singleContributionScorer("JAVA", "O1", 0.0);
 
 		ContributionAnalysisImpl analysis = new ContributionAnalysisImpl(scores, weightingScheme,
-				contributionScorerDefinitions);
+				contributionScorerDefinitions, contributorUniverse("sjanisch"));
 
 		assertThat(analysis.getStartTime().isPresent(), is(true));
 		assertThat(analysis.getEndTime().isPresent(), is(true));
@@ -76,7 +80,7 @@ public class ContributionAnalysisImplTest {
 		ContributionScorerDefinitions contributionScorerDefinitions = singleContributionScorer("JAVA", "O1", 0.0);
 
 		ContributionAnalysisImpl analysis = new ContributionAnalysisImpl(inputScores, weightingScheme,
-				contributionScorerDefinitions);
+				contributionScorerDefinitions, contributorUniverse("sjanisch"));
 
 		Collection<DetailedContributionScore> outputScores = analysis.getScores();
 
@@ -94,7 +98,7 @@ public class ContributionAnalysisImplTest {
 		ContributionScorerDefinitions contributionScorerDefinitions = singleContributionScorer("JAVA", "O1", 0.0);
 
 		ContributionAnalysisImpl analysis = new ContributionAnalysisImpl(inputScores, weightingScheme,
-				contributionScorerDefinitions);
+				contributionScorerDefinitions, contributorUniverse("sjanisch"));
 
 		Map<Contributor, Collection<ContributionScore>> normalisedScores = analysis
 				.getNormalisedScores(DetailedContributionScore::getContributor);
@@ -120,7 +124,7 @@ public class ContributionAnalysisImplTest {
 		ContributionScorerDefinitions contributionScorerDefinitions = singleContributionScorer("JAVA", "O1", 0.0);
 
 		ContributionAnalysisImpl analysis = new ContributionAnalysisImpl(inputScores, weightingScheme,
-				contributionScorerDefinitions);
+				contributionScorerDefinitions, contributorUniverse("sjanisch"));
 
 		Map<Contributor, Collection<ContributionScore>> normalisedScores = analysis
 				.getNormalisedScores(DetailedContributionScore::getContributor);
@@ -146,7 +150,7 @@ public class ContributionAnalysisImplTest {
 		ContributionScorerDefinitions contributionScorerDefinitions = singleContributionScorer("JAVA", "O1", 0.0);
 
 		ContributionAnalysisImpl analysis = new ContributionAnalysisImpl(inputScores, weightingScheme,
-				contributionScorerDefinitions);
+				contributionScorerDefinitions, contributorUniverse("sjanisch", "jondoe"));
 
 		Map<Contributor, Collection<ContributionScore>> normalisedScores = analysis
 				.getNormalisedScores(DetailedContributionScore::getContributor);
@@ -182,7 +186,7 @@ public class ContributionAnalysisImplTest {
 		ContributionScorerDefinitions contributionScorerDefinitions = singleContributionScorer("JAVA", "O1", 0.0);
 
 		ContributionAnalysisImpl analysis = new ContributionAnalysisImpl(inputScores, weightingScheme,
-				contributionScorerDefinitions);
+				contributionScorerDefinitions, contributorUniverse("sjanisch", "jondoe"));
 
 		Map<Contributor, Collection<ContributionScore>> normalisedScores = analysis
 				.getNormalisedScores(DetailedContributionScore::getContributor);
@@ -230,7 +234,7 @@ public class ContributionAnalysisImplTest {
 				0.0);
 
 		ContributionAnalysisImpl analysis = new ContributionAnalysisImpl(inputScores, weightingScheme,
-				contributionScorerDefinitions);
+				contributionScorerDefinitions, contributorUniverse("sjanisch", "jondoe", "tomsmith"));
 
 		Map<Contributor, Collection<ContributionScore>> normalisedScores = analysis
 				.getNormalisedScores(DetailedContributionScore::getContributor);
@@ -365,4 +369,8 @@ public class ContributionAnalysisImplTest {
 	}
 	// @formatter:on
 
+	private static ContributorUniverse contributorUniverse(String... contributors) {
+		Set<Contributor> universe = Stream.of(contributors).map(Contributor::of).collect(Collectors.toSet());
+		return ContributorUniverse.of(Instant.MIN, Instant.MAX, universe);
+	}
 }

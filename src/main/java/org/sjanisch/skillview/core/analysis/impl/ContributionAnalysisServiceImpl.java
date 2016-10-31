@@ -32,6 +32,8 @@ import org.sjanisch.skillview.core.analysis.api.ContributionAnalysis;
 import org.sjanisch.skillview.core.analysis.api.ContributionAnalysisService;
 import org.sjanisch.skillview.core.analysis.api.ContributionScoreService;
 import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinitions;
+import org.sjanisch.skillview.core.analysis.api.ContributorUniverse;
+import org.sjanisch.skillview.core.analysis.api.ContributorUniverseService;
 import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
 import org.sjanisch.skillview.core.analysis.api.WeightingScheme;
 
@@ -49,6 +51,7 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 	private final ContributionScoreService contributionScoreService;
 	private final WeightingScheme weightingScheme;
 	private final ContributionScorerDefinitions contributionScorerDefinitions;
+	private final ContributorUniverseService contributorUniverseService;
 
 	/**
 	 * 
@@ -59,12 +62,18 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 	 * @param contributionScorerDefinitions
 	 *            must not be {@code null}
 	 */
-	public ContributionAnalysisServiceImpl(ContributionScoreService contributionScoreService,
-			WeightingScheme weightingScheme, ContributionScorerDefinitions contributionScorerDefinitions) {
+	// @formatter:on
+	public ContributionAnalysisServiceImpl(
+			ContributionScoreService contributionScoreService,
+			WeightingScheme weightingScheme, 
+			ContributionScorerDefinitions contributionScorerDefinitions,
+			ContributorUniverseService contributorUniverseService) {
+		// @formatter:off
 		this.contributionScoreService = Objects.requireNonNull(contributionScoreService, "contributionScoreService");
 		this.weightingScheme = Objects.requireNonNull(weightingScheme, "weightingScheme");
 		this.contributionScorerDefinitions = Objects.requireNonNull(contributionScorerDefinitions,
 				"contributionScorerDefinitions");
+		this.contributorUniverseService = Objects.requireNonNull(contributorUniverseService, "contributorUniverseService");
 	}
 
 	@Override
@@ -74,8 +83,10 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 
 		try (Stream<DetailedContributionScore> scores = contributionScoreService.getContributionScores(startExclusive,
 				endInclusive)) {
+			ContributorUniverse contributorUniverse = contributorUniverseService.getContributorUniverse(startExclusive, endInclusive);
+			
 			return new ContributionAnalysisImpl(scores.collect(Collectors.toList()), weightingScheme,
-					contributionScorerDefinitions);
+					contributionScorerDefinitions, contributorUniverse);
 		}
 
 	}
