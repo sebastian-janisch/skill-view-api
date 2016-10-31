@@ -1,6 +1,6 @@
 package org.sjanisch.skillview.core.analysis.api;
 
-import java.util.Collection;
+import java.util.stream.Stream;
 
 /**
  * Augments the {@link ContributionScoreService} by adding functionality to
@@ -18,6 +18,6 @@ public interface WritableContributionScoreService extends ContributionScoreServi
 	 * @param contributionScores
 	 *            must not be {@code null}.
 	 */
-	void saveContributionScores(Collection<DetailedContributionScore> contributionScores);
+	void saveContributionScores(Stream<DetailedContributionScore> contributionScores);
 
 }

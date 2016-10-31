@@ -2,6 +2,7 @@ package org.sjanisch.skillview.core.analysis.api;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.OptionalDouble;
 
 import org.sjanisch.skillview.core.contribution.api.Contributor;
 import org.sjanisch.skillview.core.contribution.api.Project;
@@ -9,7 +10,6 @@ import org.sjanisch.skillview.core.contribution.api.Project;
 /**
  * A detailed contribution score adds contextual parameters to a contribution
  * score, such as when the score was achieved, the project it refers to, etc.
- * <p>
  * <p>
  * {@link #hashCode()} and {@link #equals(Object)} are not to be implemented.
  * <p>
@@ -75,7 +75,7 @@ public interface DetailedContributionScore extends ContributionScore {
 			}
 
 			@Override
-			public double getScore() {
+			public OptionalDouble getScore() {
 				return score.getScore();
 			}
 

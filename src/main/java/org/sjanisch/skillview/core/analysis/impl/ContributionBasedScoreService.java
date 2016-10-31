@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalDouble;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -14,10 +15,13 @@ import java.util.stream.Stream;
 import org.sjanisch.skillview.core.analysis.api.ContributionScore;
 import org.sjanisch.skillview.core.analysis.api.ContributionScoreService;
 import org.sjanisch.skillview.core.analysis.api.ContributionScorer;
+import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinition;
 import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
 import org.sjanisch.skillview.core.analysis.api.ScoreOriginator;
 import org.sjanisch.skillview.core.contribution.api.Contribution;
 import org.sjanisch.skillview.core.contribution.api.ContributionService;
+import org.sjanisch.skillview.core.contribution.api.Contributor;
+import org.sjanisch.skillview.core.contribution.api.Project;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,59 +55,74 @@ public class ContributionBasedScoreService implements ContributionScoreService {
 		Objects.requireNonNull(scorers, "scorers");
 
 		this.scorers = Collections.unmodifiableCollection(new LinkedList<>(scorers));
+
+		logInit();
 	}
 
 	@Override
-	public Collection<DetailedContributionScore> getContributionScores(Instant startExclusive, Instant endInclusive) {
+	public Stream<DetailedContributionScore> getContributionScores(Instant startExclusive, Instant endInclusive) {
 		Objects.requireNonNull(startExclusive, "startExclusive");
 		Objects.requireNonNull(endInclusive, "endInclusive");
 
 		AtomicLong scoredContributions = new AtomicLong();
 
-		try (Stream<Contribution> contributions = contributionService.retrieveContributions(startExclusive,
-				endInclusive)) {
+		Stream<Contribution> contributions = contributionService.retrieveContributions(startExclusive, endInclusive);
 
-			// @formatter:off
-			Function<Contribution, List<DetailedContributionScore>> score = contribution -> {
-				List<DetailedContributionScore> scores = scorers
-						.stream()
-						.map(scorer -> {
-							Collection<DetailedContributionScore> contributionScore = scorer
-									.score(contribution)
-									.stream()
-									.map(toDetailedContributionScore(contribution, scorer))
-									.collect(Collectors.toList());
-							log(contribution, contributionScore, scoredContributions.incrementAndGet());
-							return contributionScore;
-						})
-						.flatMap(Collection::stream)
-						.collect(Collectors.toList());
-				return scores;
-			};
-			
-			List<DetailedContributionScore> scores = contributions
-						.parallel()
-						.map(score)
-						.flatMap(List::stream)
-						.collect(Collectors.toList());
-			// @formatter:on
+		Function<Contribution, List<DetailedContributionScore>> score = contribution -> {
+
+			List<DetailedContributionScore> scores = scorers.stream().map(scorer -> {
+				ContributionScorerDefinition definition = scorer.getDefinition();
+
+				OptionalDouble rawScore = scorer.score(contribution);
+
+				if (!rawScore.isPresent()) {
+					return null;
+				}
+
+				Instant scoreTime = contribution.getContributionTime();
+				Project project = contribution.getProject();
+				Contributor contributor = contribution.getContributor();
+				ScoreOriginator scoreOriginator = definition.getScoreOriginator();
+				ContributionScore contributionScore = ContributionScore.of(definition.getSkillTag(),
+						rawScore.getAsDouble());
+
+				DetailedContributionScore result = DetailedContributionScore.of(contributionScore, scoreTime, project,
+						contributor, scoreOriginator);
+
+				log(contribution, result, scoredContributions.incrementAndGet());
+
+				return result;
+			}).filter(Objects::nonNull).collect(Collectors.toList());
 
 			return scores;
+		};
+
+		Stream<DetailedContributionScore> scores = contributions.parallel().map(score).flatMap(List::stream);
+
+		return scores.onClose(() -> contributions.close());
+	}
+
+	private void logInit() {
+		if (log.isInfoEnabled()) {
+			StringBuilder sb = new StringBuilder();
+
+			sb.append(String.format("Starting contribution based scoring service with %s scorers", scorers.size()));
+			sb.append(System.lineSeparator());
+			for (ContributionScorer scorer : scorers) {
+				sb.append("    ").append(scorer.getDefinition().getScoreOriginator().getValue());
+				sb.append(" for skill tag ");
+				sb.append(scorer.getDefinition().getSkillTag().getValue()).append(" with neutral score ");
+				sb.append(scorer.getDefinition().getNeutralScore());
+				sb.append(System.lineSeparator());
+			}
+			sb.setLength(sb.length() - System.lineSeparator().length());
+
+			log.info(sb.toString());
 		}
 	}
 
-	private static Function<ContributionScore, DetailedContributionScore> toDetailedContributionScore(
-			Contribution contribution, ContributionScorer scorer) {
-		return score -> {
-			ScoreOriginator scoreOriginator = ScoreOriginator.of(scorer.getClass().getName());
-			return DetailedContributionScore.of(score, contribution.getContributionTime(), contribution.getProject(),
-					contribution.getContributor(), scoreOriginator);
-		};
-	}
-
-	private void log(Contribution contribution, Collection<DetailedContributionScore> contributionScores,
-			long scoredContributions) {
-		if (log.isInfoEnabled() && scoredContributions % 10000 == 0) {
+	private void log(Contribution contribution, DetailedContributionScore contributionScore, long scoredContributions) {
+		if (log.isInfoEnabled() && scoredContributions % 1000 == 0) {
 			log.info(String.format("Scored %s contributions", scoredContributions));
 		}
 
@@ -113,20 +132,9 @@ public class ContributionBasedScoreService implements ContributionScoreService {
 			sb.append("Scored contribution by ").append(contribution.getContributor().getName());
 			sb.append(" at time ").append(contribution.getContributionTime()).append(": ");
 
-			if (contributionScores.isEmpty()) {
-				sb.append("no score");
-			} else {
-				sb.append(System.lineSeparator());
-
-				for (DetailedContributionScore score : contributionScores) {
-					sb.append("    ");
-					sb.append(score.getSkillTag().getValue()).append(" ");
-					sb.append(score.getScore()).append(" ");
-					sb.append(score.getScoreOriginator().getValue());
-					sb.append(System.lineSeparator());
-				}
-				sb.setLength(sb.length() - System.lineSeparator().length());
-			}
+			sb.append(contributionScore.getSkillTag().getValue()).append(" ");
+			sb.append(contributionScore.getScore()).append(" ");
+			sb.append(contributionScore.getScoreOriginator().getValue());
 
 			log.debug(sb.toString());
 		}

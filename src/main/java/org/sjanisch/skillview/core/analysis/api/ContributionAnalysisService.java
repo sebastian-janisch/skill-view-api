@@ -25,6 +25,15 @@ package org.sjanisch.skillview.core.analysis.api;
 
 import java.time.Instant;
 
+/**
+ * Offers access to statistical {@link ContributionAnalysis contribution
+ * analysis}.
+ * <p>
+ * Implementors of this interface must retain thread-safety.
+ * 
+ * @author sebastianjanisch
+ *
+ */
 public interface ContributionAnalysisService {
 
 	/**

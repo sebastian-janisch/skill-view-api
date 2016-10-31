@@ -24,28 +24,35 @@ SOFTWARE.
 package org.sjanisch.skillview.core.analysis.impl;
 
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toSet;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.function.DoubleUnaryOperator;
-import java.util.function.Predicate;
+import java.util.OptionalDouble;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.stream.DoubleStream;
 
 import org.sjanisch.skillview.core.analysis.api.ContributionAnalysis;
 import org.sjanisch.skillview.core.analysis.api.ContributionScore;
+import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinition;
+import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinitions;
 import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
+import org.sjanisch.skillview.core.analysis.api.ScoreOriginator;
+import org.sjanisch.skillview.core.analysis.api.SkillTag;
+import org.sjanisch.skillview.core.analysis.api.Weighting;
+import org.sjanisch.skillview.core.analysis.api.WeightingScheme;
 import org.sjanisch.skillview.core.contribution.api.Contributor;
+import org.sjanisch.skillview.core.utility.Lazy;
 
 /**
  * Thread-safe and immutable implementation of {@link ContributionAnalysis}.
@@ -56,248 +63,277 @@ import org.sjanisch.skillview.core.contribution.api.Contributor;
 public class ContributionAnalysisImpl implements ContributionAnalysis {
 
 	private final List<DetailedContributionScore> data;
-	private final Instant start;
-	private final Instant end;
-	private final Predicate<DetailedContributionScore> filter;
-	private final boolean normalised;
+	private final WeightingScheme weightingScheme;
+	private final ContributionScorerDefinitions contributionScorerDefinitions;
 
-	private final Instant earliest;
-	private final Instant latest;
+	private final Lazy<Collection<Contributor>> allContributors;
+	private final Lazy<Map<ScoreOriginator, DescriptiveStats>> descriptiveStats;
 
 	/**
 	 * 
 	 * @param data
 	 *            unnormalised scores. Must not be {@code null}. Copy will be
 	 *            taken.
-	 * @param start
-	 *            the start time of this analysis which must not be {@code null}
-	 *            and must not be less or equal to the earliest entry in the
-	 *            data.
-	 * @param end
-	 *            the end time of this analysis which must not be {@code null}
-	 *            and must not be greater than the latest entry in the data.
+	 * @param weightingScheme
+	 *            used to combine scores for normalisation. Must not be
+	 *            {@code null}.
+	 * @param contributionScorerDefinitions
+	 *            must not be {@code null}.
 	 */
-	public ContributionAnalysisImpl(Collection<DetailedContributionScore> data, Instant start, Instant end) {
+	public ContributionAnalysisImpl(Collection<DetailedContributionScore> data, WeightingScheme weightingScheme,
+			ContributionScorerDefinitions contributionScorerDefinitions) {
 		Objects.requireNonNull(data, "data");
+		this.weightingScheme = Objects.requireNonNull(weightingScheme, "weightingScheme");
+		this.contributionScorerDefinitions = Objects.requireNonNull(contributionScorerDefinitions,
+				"contributionScorerDefinitions");
+
 		this.data = Collections.unmodifiableList(new ArrayList<>(data));
-		this.start = Objects.requireNonNull(start, "start");
-		this.end = Objects.requireNonNull(end, "end");
 
-		LongSummaryStatistics stats = data.stream().map(DetailedContributionScore::getScoreTime)
-				.mapToLong(Instant::toEpochMilli).summaryStatistics();
+		this.allContributors = Lazy.of(this::getContributors);
+		this.descriptiveStats = Lazy.of(this::computeDescriptiveStatistics);
+	}
 
-		if (Instant.ofEpochMilli(stats.getMin()).isBefore(start)) {
-			String msg = String.format("%s vs %s", Instant.ofEpochMilli(stats.getMin()), start);
-			throw new IllegalArgumentException("earliest element is before start time: " + msg);
+	@Override
+	public Collection<DetailedContributionScore> getScores() {
+		return data;
+	}
+
+	@Override
+	public <E> Map<E, Collection<ContributionScore>> getNormalisedScores(
+			Function<DetailedContributionScore, E> partitionFunc) {
+		Objects.requireNonNull(partitionFunc, "partitionFunc");
+
+		Map<Contributor, Collection<ContributionScore>> normalisedScores = computeNormalisedScores();
+		Map<E, Collection<ContributionScore>> unnormalisedResult = createPartitionScores(partitionFunc,
+				normalisedScores);
+
+		// normalise again
+		// @formatter:off
+		Map<SkillTag, List<ContributionScore>> scoresBySkillTag = unnormalisedResult
+				.values()
+				.stream()
+				.flatMap(Collection::stream)
+				.collect(Collectors.groupingBy(ContributionScore::getSkillTag));
+		// @formatter:on
+
+		Map<SkillTag, UnaryOperator<ContributionScore>> normalisers = new HashMap<>();
+		for (SkillTag skillTag : scoresBySkillTag.keySet()) {
+			List<ContributionScore> scores = scoresBySkillTag.get(skillTag);
+			double mean = scores.stream().map(ContributionScore::getScore).filter(OptionalDouble::isPresent)
+					.mapToDouble(OptionalDouble::getAsDouble).average().orElse(Double.NaN);
+			double sumOfSquares = scores.stream().map(ContributionScore::getScore).filter(OptionalDouble::isPresent)
+					.mapToDouble(OptionalDouble::getAsDouble).map(score -> Math.pow(score - mean, 2)).sum();
+			double stdDev = Math.sqrt(1.0 / scores.size() * sumOfSquares);
+
+			if (Double.isNaN(mean) || Double.isNaN(stdDev) || stdDev == 0.0) {
+				normalisers.put(skillTag, __ -> ContributionScore.of(skillTag, 0.0));
+			} else {
+				normalisers.put(skillTag, score -> {
+					return ContributionScore.of(skillTag, (score.getScore().getAsDouble() - mean) / stdDev);
+				});
+			}
 		}
 
-		if (Instant.ofEpochMilli(stats.getMax()).isAfter(end)) {
-			String msg = String.format("%s vs %s", Instant.ofEpochMilli(stats.getMax()), end);
-			throw new IllegalArgumentException("latest element is after end time: " + msg);
-		}
-
-		this.earliest = Instant.ofEpochMilli(stats.getMin());
-		this.latest = Instant.ofEpochMilli(stats.getMax());
-
-		filter = __ -> true;
-		this.normalised = false;
-	}
-
-	private ContributionAnalysisImpl(List<DetailedContributionScore> data, Instant start, Instant end,
-			Predicate<DetailedContributionScore> filter, boolean normalised) {
-		this.data = data; // no copy, internal contructor
-		this.start = start;
-		this.end = end;
-		this.filter = filter;
-		this.normalised = normalised;
-
-		LongSummaryStatistics stats = data.stream().filter(filter).map(DetailedContributionScore::getScoreTime)
-				.mapToLong(Instant::toEpochMilli).summaryStatistics();
-
-		this.earliest = Instant.ofEpochMilli(stats.getMin());
-		this.latest = Instant.ofEpochMilli(stats.getMax());
-	}
-
-	@Override
-	public Instant getStartTime() {
-		return start;
-	}
-
-	@Override
-	public Instant getEndTime() {
-		return end;
-	}
-
-	@Override
-	public Collection<Contributor> getContributors() {
-		return data().map(DetailedContributionScore::getContributor).collect(Collectors.toSet());
-	}
-
-	@Override
-	public Map<Contributor, Collection<ContributionScore>> getScores() {
-		if (normalised) {
-			Map<Contributor, Collection<ContributionScore>> result = normalise(data(), null);
-			return result;
-		} else {
-			// @formatter:off
-			Map<Contributor, Collection<ContributionScore>> result = data()
-					.collect(Collectors.groupingBy(DetailedContributionScore::getContributor, 
-												   Collectors.mapping(ContributionScore.class::cast, 
-														   		      Collectors.toCollection(ArrayList::new))));
-			// @formatter:on
-			return result;
-		}
-	}
-
-	@Override
-	public Collection<ContributionScore> getScores(Contributor contributor) {
-		Objects.requireNonNull(contributor, "contributor");
-
-		if (normalised) {
-			Map<Contributor, Collection<ContributionScore>> normalised = normalise(data(), contributor);
-			return normalised.getOrDefault(contributor, Collections.emptySet());
-		} else {
-			Collection<ContributionScore> result = data().filter(score -> score.getContributor().equals(contributor))
-					.collect(Collectors.toSet());
-			return result;
-		}
-	}
-
-	@Override
-	public Collection<ContributionAnalysis> getScores(Duration timeWindow) {
-		Objects.requireNonNull(timeWindow, "timeWindow");
-
-		long excessStart = (long) Math
-				.floor(Duration.between(start, earliest).getSeconds() / (timeWindow.getSeconds() + 0.0));
-		long excessEnd = (long) Math.ceil(Duration.between(latest, end).getSeconds() / (timeWindow.getSeconds() + 0.0));
-
-		Instant adjustedStart = start.plus(Duration.ofSeconds(timeWindow.getSeconds() * excessStart));
-		Instant adjustedEnd = end.minus(Duration.ofSeconds(timeWindow.getSeconds() * excessEnd));
-
-		Instant currentStart = adjustedStart;
-
-		Collection<ContributionAnalysis> result = new LinkedList<>();
-		do {
-			Instant closedStart = currentStart;
-			Instant closedEnd = closedStart.plus(timeWindow);
-
-			Predicate<DetailedContributionScore> filter = score -> !closedStart.isAfter(score.getScoreTime());
-			filter = filter.and(score -> score.getScoreTime().isBefore(closedEnd));
-
-			result.add(new ContributionAnalysisImpl(data, closedStart, closedEnd.minusSeconds(1),
-					filter.and(this.filter), normalised));
-
-		} while (!(currentStart = currentStart.plus(timeWindow)).isAfter(adjustedEnd));
-
-		return Collections.unmodifiableCollection(result);
-	}
-
-	@Override
-	public boolean isNormalised() {
-		return normalised;
-	}
-
-	@Override
-	public ContributionAnalysis normalised() {
-		return new ContributionAnalysisImpl(data, start, end, filter, true);
-	}
-
-	@Override
-	public ContributionAnalysis denormalised() {
-		return new ContributionAnalysisImpl(data, start, end, filter, false);
-	}
-
-	private Stream<DetailedContributionScore> data() {
-		return data.stream().filter(filter);
-	}
-
-	private Map<Contributor, Collection<ContributionScore>> normalise(Stream<DetailedContributionScore> unnormalised,
-			Contributor contributor) {
-		Map<NormaliseKey, List<DetailedContributionScore>> groups = unnormalised.collect(groupingBy(NormaliseKey::new));
-
-		Map<Contributor, Collection<ContributionScore>> result = new HashMap<>();
-		for (NormaliseKey key : groups.keySet()) {
-			List<DetailedContributionScore> scores = groups.get(key);
-			Map<Contributor, Collection<ContributionScore>> normalised = normalise(key, scores, contributor);
-
-			for (Contributor c : normalised.keySet()) {
-				result.putIfAbsent(c, new LinkedList<>());
-				result.get(c).addAll(normalised.get(c));
+		Map<E, Collection<ContributionScore>> result = new HashMap<>();
+		for (E partition : unnormalisedResult.keySet()) {
+			result.put(partition, new LinkedList<>());
+			for (ContributionScore score : unnormalisedResult.get(partition)) {
+				UnaryOperator<ContributionScore> normaliser = normalisers.get(score.getSkillTag());
+				ContributionScore normalised = normaliser.apply(score);
+				result.get(partition).add(normalised);
 			}
 		}
 
 		return result;
 	}
 
-	private Map<Contributor, Collection<ContributionScore>> normalise(NormaliseKey key,
-			List<DetailedContributionScore> scores, Contributor contributor) {
-		if (scores.isEmpty()) {
-			return Collections.emptyMap();
+	private Map<Contributor, Collection<ContributionScore>> computeNormalisedScores() {
+		Map<Contributor, Collection<ContributionScore>> normalisedScores = new HashMap<>();
+
+		Collection<SkillTag> skillTags = weightingScheme.getSkillTags();
+		for (SkillTag skillTag : skillTags) {
+			Weighting weighting = weightingScheme.getWeighting(skillTag);
+			Collection<ScoreOriginator> scoreOriginators = weighting.getScoreOriginators();
+
+			// normalise and weight
+			Map<Contributor, Double> weightedScores = new HashMap<>();
+			for (ScoreOriginator scoreOriginator : scoreOriginators) {
+				DescriptiveStats stats = descriptiveStats.get().get(scoreOriginator);
+				if (stats != null) {
+					Map<Contributor, ContributionScore> normalised = stats.normalise(data);
+					for (Contributor contributor : normalised.keySet()) {
+						ContributionScore normalisedScore = normalised.get(contributor);
+						double weightedScore = normalisedScore.getScore().getAsDouble()
+								* weighting.getWeight(scoreOriginator);
+						if (!weightedScores.containsKey(contributor)) {
+							weightedScores.put(contributor, 0.0);
+						}
+						weightedScores.put(contributor, weightedScores.get(contributor) + weightedScore);
+					}
+				}
+			}
+
+			// normalise weighted
+			double mean = weightedScores.values().stream().mapToDouble(Double::doubleValue).average()
+					.orElse(Double.NaN);
+
+			double sumOfSquares = weightedScores.values().stream().mapToDouble(Double::doubleValue)
+					.map(score -> Math.pow((score - mean), 2)).sum();
+
+			double stdDev = Math.sqrt(1.0 / weightedScores.size() * sumOfSquares);
+
+			ContributionScore absentScore = ContributionScore.of(skillTag, 0.0);
+			if (Double.isNaN(mean) || Double.isNaN(stdDev) || stdDev == 0.0) {
+				for (Contributor contributor : allContributors.get()) {
+					normalisedScores.putIfAbsent(contributor, new LinkedList<>());
+					normalisedScores.get(contributor).add(absentScore);
+				}
+			} else {
+				for (Contributor contributor : allContributors.get()) {
+					normalisedScores.putIfAbsent(contributor, new LinkedList<>());
+					Double weightedScore = weightedScores.get(contributor);
+					if (weightedScore == null) {
+						normalisedScores.get(contributor).add(absentScore);
+					} else {
+						double normalesedScore = (weightedScore - mean) / stdDev;
+						normalisedScores.get(contributor).add(ContributionScore.of(skillTag, normalesedScore));
+					}
+				}
+			}
+		}
+		return normalisedScores;
+	}
+
+	private <E> Map<E, Collection<ContributionScore>> createPartitionScores(
+			Function<DetailedContributionScore, E> partitionFunc,
+			Map<Contributor, Collection<ContributionScore>> normalisedScores) {
+		Map<E, Collection<ContributionScore>> result = new HashMap<>();
+
+		Map<E, List<DetailedContributionScore>> partitions = data.stream().collect(groupingBy(partitionFunc));
+		for (E partition : partitions.keySet()) {
+			List<DetailedContributionScore> scores = partitions.get(partition);
+			Set<Contributor> contributors = scores.stream().map(DetailedContributionScore::getContributor)
+					.collect(toSet());
+			double weight = 1.0 / contributors.size();
+
+			Map<SkillTag, ContributionScore> partitionScores = new HashMap<>();
+			for (Contributor contributor : contributors) {
+				Collection<ContributionScore> normalisedScoresForContributor = normalisedScores.get(contributor);
+				for (ContributionScore score : normalisedScoresForContributor) {
+					double weightedScore = score.getScore().getAsDouble() * weight;
+					if (!partitionScores.containsKey(score.getSkillTag())) {
+						partitionScores.put(score.getSkillTag(),
+								ContributionScore.of(score.getSkillTag(), weightedScore));
+					} else {
+						double existingScore = partitionScores.get(score.getSkillTag()).getScore().getAsDouble();
+						partitionScores.put(score.getSkillTag(),
+								ContributionScore.of(score.getSkillTag(), existingScore + weightedScore));
+					}
+				}
+			}
+
+			result.put(partition, partitionScores.values());
+		}
+		return result;
+	}
+
+	private Map<ScoreOriginator, DescriptiveStats> computeDescriptiveStatistics() {
+		Map<ScoreOriginator, DescriptiveStats> result = new HashMap<>();
+
+		Set<ScoreOriginator> scoreOriginators = data.stream().map(DetailedContributionScore::getScoreOriginator)
+				.collect(Collectors.toSet());
+
+		for (ScoreOriginator scoreOriginator : scoreOriginators) {
+			ContributionScorerDefinition definition = contributionScorerDefinitions.getDefinition(scoreOriginator);
+			DescriptiveStats descriptiveStats = DescriptiveStats.create(data, definition, allContributors.get());
+			result.put(scoreOriginator, descriptiveStats);
 		}
 
-		// @formatter:off
-		Map<Contributor, Double> scoreSums = scores
-				.stream()
-				.collect(Collectors.groupingBy(DetailedContributionScore::getContributor, 
-											   Collectors.mapping(score -> score.getScore(), 
-													   		      Collectors.summingDouble(d -> d))));
-		// @formatter:on
+		return Collections.unmodifiableMap(result);
+	}
 
-		double average = scoreSums.values().stream().mapToDouble(Double::doubleValue).average().getAsDouble();
-		double sumOfSquares = scoreSums.values().stream().mapToDouble(Double::doubleValue)
-				.map(score -> Math.pow(score - average, 2)).sum();
+	private Collection<Contributor> getContributors() {
+		Set<Contributor> result = data.stream().map(DetailedContributionScore::getContributor)
+				.collect(Collectors.toSet());
+		return Collections.unmodifiableSet(result);
+	}
 
-		double stdDev = Math.sqrt(1.0 / scoreSums.size() * sumOfSquares);
+	private static class DescriptiveStats {
+		private final ContributionScorerDefinition scorerDefinition;
+		private final double mean;
+		private final double stdDev;
 
-		DoubleUnaryOperator toStandardised = score -> {
-			if(stdDev == 0.0) {
+		DescriptiveStats(ContributionScorerDefinition scorerDefinition, double mean, double stdDev) {
+			this.scorerDefinition = scorerDefinition;
+			this.mean = mean;
+			this.stdDev = stdDev;
+		}
+
+		static DescriptiveStats create(Collection<DetailedContributionScore> scores,
+				ContributionScorerDefinition scorerDefinition, Collection<Contributor> allContributors) {
+			ScoreOriginator scoreOriginator = scorerDefinition.getScoreOriginator();
+
+			if (scores.isEmpty()) {
+				return new DescriptiveStats(scorerDefinition, Double.NaN, Double.NaN);
+			}
+
+			// @formatter:off
+			Map<Contributor, Double> rawScoresByContributors = scores
+					.stream()
+					.filter(score -> score.getScore().isPresent())
+					.filter(score -> score.getScoreOriginator().equals(scoreOriginator))
+					.collect(Collectors.groupingBy(DetailedContributionScore::getContributor, 
+							                       Collectors.summingDouble(score -> score.getScore().getAsDouble())));
+			// @formatter:on
+
+			for (Contributor contributor : allContributors) {
+				if (!rawScoresByContributors.containsKey(contributor)) {
+					rawScoresByContributors.put(contributor, scorerDefinition.getNeutralScore());
+				}
+			}
+
+			// @formatter:off
+			double[] rawScores = rawScoresByContributors
+					.values()
+					.stream()
+					.mapToDouble(Double::doubleValue)
+					.toArray();
+			// @formatter:on
+
+			double mean = DoubleStream.of(rawScores).average().getAsDouble();
+			double sumOfSquares = DoubleStream.of(rawScores).map(rawScore -> Math.pow((rawScore - mean), 2)).sum();
+			double stdDev = Math.sqrt(1.0 / rawScoresByContributors.size() * sumOfSquares);
+			return new DescriptiveStats(scorerDefinition, mean, stdDev);
+		}
+
+		Map<Contributor, ContributionScore> normalise(Collection<DetailedContributionScore> scores) {
+			ScoreOriginator scoreOriginator = scorerDefinition.getScoreOriginator();
+			SkillTag skillTag = scorerDefinition.getSkillTag();
+
+			// @formatter:off
+			Map<Contributor, Double> rawScores = scores
+					.stream()
+					.filter(score -> score.getScore().isPresent())
+					.filter(score -> score.getScoreOriginator().equals(scoreOriginator))
+					.collect(Collectors.groupingBy(DetailedContributionScore::getContributor, 
+												   Collectors.summingDouble(score -> score.getScore().getAsDouble())));
+			
+			Map<Contributor, ContributionScore> normalised = rawScores
+					.entrySet()
+					.stream()
+					.collect(Collectors.toMap(Entry::getKey, e -> ContributionScore.of(skillTag, normalise(e.getValue()))));
+			
+			// @formatter:on
+			return normalised;
+		}
+
+		double normalise(double score) {
+			if (Double.isNaN(stdDev) || stdDev == 0.0) {
 				return 0.0;
 			}
-			double standardised = (score - average) / stdDev;
-			return standardised;
-		};
 
-		Predicate<Contributor> contributorFilter = c -> contributor == null ? true : c.equals(contributor);
-
-		// @formatter:off
-		Map<Contributor, Double> standardisedScores = scoreSums
-				.entrySet()
-				.stream()
-				.filter(e -> contributorFilter.test(e.getKey()))
-				.collect(Collectors.toMap(Entry::getKey, e -> toStandardised.applyAsDouble(e.getValue())));
-		
-		Map<Contributor, Collection<ContributionScore>> result = standardisedScores
-				.entrySet()
-				.stream()
-				.collect(Collectors.groupingBy(Entry::getKey, 
-											   Collectors.mapping(e -> 
-											   		   ContributionScore.of(key.score.getSkillTag(), 
-													   e.getValue()), Collectors.toCollection(ArrayList::new))));
-		// @formatter:on
-
-		return result;
-	}
-
-	private static class NormaliseKey {
-		private final DetailedContributionScore score;
-
-		public NormaliseKey(DetailedContributionScore score) {
-			this.score = score;
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hash(score.getScoreOriginator(), score.getSkillTag());
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (obj == null || !(obj instanceof NormaliseKey)) {
-				return false;
-			}
-			NormaliseKey key = (NormaliseKey) obj;
-			return key.score.getScoreOriginator().equals(score.getScoreOriginator())
-					&& key.score.getSkillTag().equals(score.getSkillTag());
+			double normalised = (score - mean) / stdDev;
+			return normalised;
 		}
 
 	}

@@ -49,9 +49,7 @@ public class MultiContributionService implements ContributionService {
 				.reduce(Stream.empty(), Stream::concat);
 		// @formatter:on
 
-		result.onClose(() -> streams.forEach(Stream::close));
-
-		return result;
+		return result.onClose(() -> streams.forEach(Stream::close));
 	}
 
 }

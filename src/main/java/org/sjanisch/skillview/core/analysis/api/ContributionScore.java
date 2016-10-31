@@ -24,6 +24,7 @@ SOFTWARE.
 package org.sjanisch.skillview.core.analysis.api;
 
 import java.util.Objects;
+import java.util.OptionalDouble;
 
 /**
  * A contribution score describes a numerical value assigned to a certain skill.
@@ -48,9 +49,9 @@ public interface ContributionScore {
 
 	/**
 	 * 
-	 * @return the score
+	 * @return the score if it could be determined. Never {@code null}.
 	 */
-	double getScore();
+	OptionalDouble getScore();
 
 	/**
 	 * 
@@ -62,6 +63,8 @@ public interface ContributionScore {
 	public static ContributionScore of(SkillTag skillTag, double score) {
 		Objects.requireNonNull(skillTag, "skillTag");
 
+		OptionalDouble wrapped = Double.isNaN(score) ? OptionalDouble.empty() : OptionalDouble.of(score);
+
 		return new ContributionScore() {
 
 			@Override
@@ -70,8 +73,8 @@ public interface ContributionScore {
 			}
 
 			@Override
-			public double getScore() {
-				return score;
+			public OptionalDouble getScore() {
+				return wrapped;
 			}
 
 			@Override

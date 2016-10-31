@@ -24,13 +24,16 @@ SOFTWARE.
 package org.sjanisch.skillview.core.analysis.impl;
 
 import java.time.Instant;
-import java.util.Collection;
 import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.sjanisch.skillview.core.analysis.api.ContributionAnalysis;
 import org.sjanisch.skillview.core.analysis.api.ContributionAnalysisService;
 import org.sjanisch.skillview.core.analysis.api.ContributionScoreService;
+import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinitions;
 import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
+import org.sjanisch.skillview.core.analysis.api.WeightingScheme;
 
 /**
  * Implements the {@link ContributionAnalysisService} against a
@@ -44,14 +47,24 @@ import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
 public class ContributionAnalysisServiceImpl implements ContributionAnalysisService {
 
 	private final ContributionScoreService contributionScoreService;
+	private final WeightingScheme weightingScheme;
+	private final ContributionScorerDefinitions contributionScorerDefinitions;
 
 	/**
 	 * 
 	 * @param contributionScoreService
 	 *            must not be {@code null}
+	 * @param weightingScheme
+	 *            must not be {@code null}
+	 * @param contributionScorerDefinitions
+	 *            must not be {@code null}
 	 */
-	public ContributionAnalysisServiceImpl(ContributionScoreService contributionScoreService) {
+	public ContributionAnalysisServiceImpl(ContributionScoreService contributionScoreService,
+			WeightingScheme weightingScheme, ContributionScorerDefinitions contributionScorerDefinitions) {
 		this.contributionScoreService = Objects.requireNonNull(contributionScoreService, "contributionScoreService");
+		this.weightingScheme = Objects.requireNonNull(weightingScheme, "weightingScheme");
+		this.contributionScorerDefinitions = Objects.requireNonNull(contributionScorerDefinitions,
+				"contributionScorerDefinitions");
 	}
 
 	@Override
@@ -59,10 +72,12 @@ public class ContributionAnalysisServiceImpl implements ContributionAnalysisServ
 		Objects.requireNonNull(startExclusive, "startExclusive");
 		Objects.requireNonNull(endInclusive, "endInclusive");
 
-		Collection<DetailedContributionScore> scores = contributionScoreService.getContributionScores(startExclusive,
-				endInclusive);
+		try (Stream<DetailedContributionScore> scores = contributionScoreService.getContributionScores(startExclusive,
+				endInclusive)) {
+			return new ContributionAnalysisImpl(scores.collect(Collectors.toList()), weightingScheme,
+					contributionScorerDefinitions);
+		}
 
-		return new ContributionAnalysisImpl(scores, startExclusive, endInclusive);
 	}
 
 }
