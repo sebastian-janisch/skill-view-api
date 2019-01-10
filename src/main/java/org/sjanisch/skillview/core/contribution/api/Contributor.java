@@ -24,13 +24,14 @@ SOFTWARE.
 package org.sjanisch.skillview.core.contribution.api;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Designates the originator or contributor of a contribution which is a unique
  * identifier for this contributor.
  * <p>
  * {@link #hashCode()} and {@link #equals(Object)} are implemented against
- * {@link #getName()}.
+ * {@link #getName()} and {@link #getEmail()}.
  * <p>
  * Implementors must retain thread-safety and immutability.
  * 
@@ -47,11 +48,29 @@ public interface Contributor {
 
 	/**
 	 * 
+	 * @return never {@code null}
+	 */
+	Optional<String> getEmail();
+
+	/**
+	 * 
 	 * @param name
 	 *            must not be {@code null} or whitespace.
 	 * @return never {@code null}
 	 */
 	public static Contributor of(String name) {
+		return of(name, null);
+	}
+
+	/**
+	 * 
+	 * @param name
+	 *            must not be {@code null} or whitespace.
+	 * @param email
+	 *            can be {@code null}
+	 * @return never {@code null}
+	 */
+	public static Contributor of(String name, String email) {
 		Objects.requireNonNull(name, "name");
 		return new Contributor() {
 
@@ -61,18 +80,36 @@ public interface Contributor {
 			}
 
 			@Override
+			public Optional<String> getEmail() {
+				return Optional.ofNullable(email);
+			}
+
+			@Override
 			public String toString() {
-				return String.format("%s[%s]", getClass().getSimpleName(), name);
+				return String.format("%s[%s, %s]", getClass().getSimpleName(), name, email);
 			}
 
 			@Override
 			public int hashCode() {
-				return name.hashCode();
+				return (name + email).hashCode();
 			}
 
 			@Override
 			public boolean equals(Object obj) {
-				return obj != null && obj instanceof Contributor && ((Contributor) obj).getName().equals(name);
+				if (obj != null && obj instanceof Contributor) {
+					Contributor c = (Contributor) obj;
+					if (c.getName().equals(name)) {
+						if (getEmail().isPresent() && c.getEmail().isPresent()) {
+							if (getEmail().get().equals(c.getEmail().get())) {
+								return true;
+							}
+						} else if (!getEmail().isPresent() && !c.getEmail().isPresent()) {
+							return true;
+						}
+					}
+					return false;
+				}
+				return false;
 			}
 		};
 	}
