@@ -81,13 +81,14 @@ public class ContributionBasedScoreService implements ContributionScoreService {
 
 				Instant scoreTime = contribution.getContributionTime();
 				Project project = contribution.getProject();
+				String contributionHash = contribution.getId();
 				Contributor contributor = contribution.getContributor();
 				ScoreOriginator scoreOriginator = definition.getScoreOriginator();
 				ContributionScore contributionScore = ContributionScore.of(definition.getSkillTag(),
 						rawScore.getAsDouble());
 
 				DetailedContributionScore result = DetailedContributionScore.of(contributionScore, scoreTime, project,
-						contributor, scoreOriginator);
+						contributionHash, contributor, scoreOriginator);
 
 				log(contribution, result, scoredContributions.incrementAndGet());
 
