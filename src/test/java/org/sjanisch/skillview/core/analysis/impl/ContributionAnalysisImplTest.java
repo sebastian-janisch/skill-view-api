@@ -308,6 +308,7 @@ public class ContributionAnalysisImplTest {
 				rawScore, 
 				scoreTime, 
 				Project.of(project), 
+				ContributionId.of("123"),
 				Contributor.of(contributor),
 				ScoreOriginator.of(scoreOriginator));
 	}
