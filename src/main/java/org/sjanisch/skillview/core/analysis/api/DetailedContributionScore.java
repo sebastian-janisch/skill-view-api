@@ -6,6 +6,7 @@ import java.util.OptionalDouble;
 
 import org.sjanisch.skillview.core.contribution.api.Contributor;
 import org.sjanisch.skillview.core.contribution.api.Project;
+import org.sjanisch.skillview.core.contribution.api.ContributionId;
 
 /**
  * A detailed contribution score adds contextual parameters to a contribution
@@ -34,9 +35,9 @@ public interface DetailedContributionScore extends ContributionScore {
 	
 	/**
 	 *
-	 * @return a hash code that together with project, time and contributor identifies this commit. Never {@code null}.
+	 * @return an id that together with project, time and contributor identifies this commit. Never {@code null}.
 	 */ 
-	String getContributionHash();
+	ContributionId getContributionId();
 
 	/**
 	 * 
@@ -56,17 +57,17 @@ public interface DetailedContributionScore extends ContributionScore {
 	 * @param score
 	 * @param scoreTime
 	 * @param project
-	 * @param contributionHash
+	 * @param contributionId
 	 * @param contributor
 	 * @param scoreOriginator
 	 * @return never {@code null}
 	 */
 	public static DetailedContributionScore of(ContributionScore score, Instant scoreTime, Project project,
-			String contributionHash, Contributor contributor, ScoreOriginator scoreOriginator) {
+			ContributionId contributionId, Contributor contributor, ScoreOriginator scoreOriginator) {
 		Objects.requireNonNull(score, "score");
 		Objects.requireNonNull(scoreTime, "scoreTime");
 		Objects.requireNonNull(project, "project");
-		Objects.requireNonNull(contributionHash, "contributionHash");
+		Objects.requireNonNull(contributionId, "contributionId");
 		Objects.requireNonNull(contributor, "contributor");
 		Objects.requireNonNull(scoreOriginator, "scoreOriginator");
 
@@ -98,8 +99,8 @@ public interface DetailedContributionScore extends ContributionScore {
 			}
 			
 			@Override
-			public Project getContributionHash() {
-				return contributionHash;
+			public ContributionId getContributionId() {
+				return contributionId;
 			}
 
 			@Override
@@ -110,7 +111,7 @@ public interface DetailedContributionScore extends ContributionScore {
 			@Override
 			public String toString() {
 				return String.format("%s[%s:%s:%s:%s:%s:%s]", getClass().getSimpleName(), score.toString(),
-						project.toString(), project.getContributionHash(), scoreTime.toString(), 
+						project.toString(), project.getContributionId(), scoreTime.toString(), 
 						     contributor.toString(), scoreOriginator.toString());
 			}
 		};
