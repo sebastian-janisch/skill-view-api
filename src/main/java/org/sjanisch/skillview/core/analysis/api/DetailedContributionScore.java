@@ -111,7 +111,7 @@ public interface DetailedContributionScore extends ContributionScore {
 			@Override
 			public String toString() {
 				return String.format("%s[%s:%s:%s:%s:%s:%s]", getClass().getSimpleName(), score.toString(),
-						project.toString(), project.getContributionId(), scoreTime.toString(), 
+						project.toString(), contributionId.toString(), scoreTime.toString(), 
 						     contributor.toString(), scoreOriginator.toString());
 			}
 		};
