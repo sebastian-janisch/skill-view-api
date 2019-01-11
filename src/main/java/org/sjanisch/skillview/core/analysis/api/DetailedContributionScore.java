@@ -31,6 +31,12 @@ public interface DetailedContributionScore extends ContributionScore {
 	 * @return the project this score relates to. Never {@code null}.
 	 */
 	Project getProject();
+	
+	/**
+	 *
+	 * @return a hash code that together with project, time and contributor identifies this commit. Never {@code null}.
+	 */ 
+	String getContributionHash();
 
 	/**
 	 * 
@@ -50,15 +56,17 @@ public interface DetailedContributionScore extends ContributionScore {
 	 * @param score
 	 * @param scoreTime
 	 * @param project
+	 * @param contributionHash
 	 * @param contributor
 	 * @param scoreOriginator
 	 * @return never {@code null}
 	 */
 	public static DetailedContributionScore of(ContributionScore score, Instant scoreTime, Project project,
-			Contributor contributor, ScoreOriginator scoreOriginator) {
+			String contributionHash, Contributor contributor, ScoreOriginator scoreOriginator) {
 		Objects.requireNonNull(score, "score");
 		Objects.requireNonNull(scoreTime, "scoreTime");
 		Objects.requireNonNull(project, "project");
+		Objects.requireNonNull(contributionHash, "contributionHash");
 		Objects.requireNonNull(contributor, "contributor");
 		Objects.requireNonNull(scoreOriginator, "scoreOriginator");
 
@@ -88,6 +96,11 @@ public interface DetailedContributionScore extends ContributionScore {
 			public Project getProject() {
 				return project;
 			}
+			
+			@Override
+			public Project getContributionHash() {
+				return contributionHash;
+			}
 
 			@Override
 			public Contributor getContributor() {
@@ -96,8 +109,9 @@ public interface DetailedContributionScore extends ContributionScore {
 
 			@Override
 			public String toString() {
-				return String.format("%s[%s:%s:%s:%s:%s]", getClass().getSimpleName(), score.toString(),
-						project.toString(), scoreTime.toString(), contributor.toString(), scoreOriginator.toString());
+				return String.format("%s[%s:%s:%s:%s:%s:%s]", getClass().getSimpleName(), score.toString(),
+						project.toString(), project.getContributionHash(), scoreTime.toString(), 
+						     contributor.toString(), scoreOriginator.toString());
 			}
 		};
 	}
