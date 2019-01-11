@@ -19,6 +19,7 @@ import org.sjanisch.skillview.core.analysis.api.ContributionScorerDefinition;
 import org.sjanisch.skillview.core.analysis.api.DetailedContributionScore;
 import org.sjanisch.skillview.core.analysis.api.ScoreOriginator;
 import org.sjanisch.skillview.core.contribution.api.Contribution;
+import org.sjanisch.skillview.core.contribution.api.ContributionId;
 import org.sjanisch.skillview.core.contribution.api.ContributionService;
 import org.sjanisch.skillview.core.contribution.api.Contributor;
 import org.sjanisch.skillview.core.contribution.api.Project;
@@ -81,14 +82,14 @@ public class ContributionBasedScoreService implements ContributionScoreService {
 
 				Instant scoreTime = contribution.getContributionTime();
 				Project project = contribution.getProject();
-				String contributionHash = contribution.getId();
+				ContributionId contributionId = contribution.getId();
 				Contributor contributor = contribution.getContributor();
 				ScoreOriginator scoreOriginator = definition.getScoreOriginator();
 				ContributionScore contributionScore = ContributionScore.of(definition.getSkillTag(),
 						rawScore.getAsDouble());
 
 				DetailedContributionScore result = DetailedContributionScore.of(contributionScore, scoreTime, project,
-						contributionHash, contributor, scoreOriginator);
+						contributionId, contributor, scoreOriginator);
 
 				log(contribution, result, scoredContributions.incrementAndGet());
 
