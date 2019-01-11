@@ -28,6 +28,7 @@ import org.sjanisch.skillview.core.analysis.api.SkillTag;
 import org.sjanisch.skillview.core.analysis.api.Weighting;
 import org.sjanisch.skillview.core.analysis.api.WeightingScheme;
 import org.sjanisch.skillview.core.contribution.api.Contributor;
+import org.sjanisch.skillview.core.contribution.api.ContributionId;
 import org.sjanisch.skillview.core.contribution.api.Project;
 
 /**
